@@ -1,4 +1,4 @@
-INPUT_IMAGE_SIZE: &INPUT_SIZE [320, 1152]
+INPUT_IMAGE_SIZE: &INPUT_SIZE [384, 1152]
 
 DATASET:
   NAME: "build_coco_dataset"
@@ -37,12 +37,38 @@ MODEL:
   MODULES:
     -
       NAME: "MobileNetV3"
-
+      pretrained: "data/mobilenet_v3_small-047dcff4.pth"
+      base_channels: 16
+      inverted_residuals:
+        - [16, 3, 16, 16, True, False, 2, 1]
+        - [16, 3, 72, 24, False, False, 2, 1]
+        - [24, 3, 88, 24, False, False, 1, 1]
+        - [24, 5, 96, 40, True, False, 2, 1]
+        - [40, 5, 240, 40, True, False, 1, 1]
+        - [40, 5, 240, 40, True, False, 1, 1]
+        - [40, 5, 120, 48, True, False, 1, 1]
+        - [48, 5, 144, 48, True, False, 1, 1]
+        - [48, 5, 288, 96, True, False, 2, 1]
+        - [96, 5, 576, 96, True, False, 1, 1]
+        - [96, 5, 576, 96, True, False, 1, 1]
+      out_features: [3, 8, 11]
+      freeze_at: -1
     -
       NAME: "BiFPN"
-
+      conv_channels: [24, 48, 96]
+      num_channels: 48
     -
       NAME: "RetinaNetHead"
+      shared: False
+      num_classes: 3
+      num_anchors: 9
+      conv_channels:
+        - [48, 48, 48, 48, 48]
+        - [48, 48, 48, 48, 48]
+        - [48, 48, 48, 48, 48]
+        - [48, 48, 48, 48, 48]
+        - [48, 48, 48, 48, 48]
+
   ANCHOR_GENERATOR:
     OFFSET: 0.5
     SIZES: [
@@ -55,3 +81,20 @@ MODEL:
       [0.5, 1., 2.],
       [0.5, 1., 2.]
     ]
+  
+  PREDICT:
+    NUM_OUTPUTS: 100
+    SCORE_THRESHOLD: 0.1
+    IOU_THRESHOLD: 0.5
+
+CRITERION:
+  NAME: "RetinaNetCriterion"
+  IOU_THRESHOLDS:
+    - [0.4, 0.5]
+    - [0.4, 0.5]
+    - [0.4, 0.5]
+  FOCAL_LOSS_GAMMA: 2.0
+  FOCAL_LOSS_ALPHA: 0.25
+  BBOX_REG_LOSS_TYPE: "smooth_l1"
+  SMOOTH_L1_LOSS_BETA: 0.1
+  
