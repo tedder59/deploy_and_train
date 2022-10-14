@@ -1,4 +1,27 @@
-INPUT_IMAGE_SIZE: &INPUT_SIZE [384, 1152]
+ANCHOR_GENERATOR: &ANCHORS
+  offset: 0.5
+  sizes: [
+    [32., 40.3174736, 50.79683366],
+    [64., 80.63494719, 101.59366733],
+    [128., 161.26989439, 203.18733465],
+    [256., 322.53978877, 406.3746693],
+    [512., 645.07957755, 812.74933861]
+  ]
+  aspect_ratios: [
+    [0.5, 1., 2.],
+    [0.5, 1., 2.],
+    [0.5, 1., 2.],
+    [0.5, 1., 2.],
+    [0.5, 1., 2.]
+  ]
+  features_spatial: [
+    [48, 144],
+    [24, 72],
+    [12, 36],
+    [6, 18],
+    [3, 9]
+  ]
+  strides: [8, 16, 32, 64, 128]
 
 DATASET:
   NAME: "build_coco_dataset"
@@ -7,10 +30,10 @@ DATASET:
     TRANSFORMS:
       COCOLoadImage: null
       COCOBBoxResize:
-        INPUT_SIZE: *INPUT_SIZE
+        INPUT_SIZE: &INPUT_SIZE [384, 1152]
       
   TEST: 
-    ANNOTATION: "datasets/COCO/kitti_val.json"
+    ANNOTATION: &TEST_ANNOTATION "datasets/COCO/kitti_val.json"
     TRANSFORMS:
       COCOLoadImage: null
       COCOResize:
@@ -52,40 +75,36 @@ MODEL:
         - [96, 5, 576, 96, True, False, 1, 1]
         - [96, 5, 576, 96, True, False, 1, 1]
       out_features: [3, 8, 11]
+      out_names: ["p3", "p4", "p5"]
       freeze_at: -1
     -
       NAME: "BiFPN"
       conv_channels: [24, 48, 96]
       num_channels: 48
+      in_names: ["p3", "p4", "p5"]
+      out_names: ["p3", "p4", "p5", "p6", "p7"]
     -
       NAME: "RetinaNetHead"
       shared: False
-      num_classes: 3
-      num_anchors: 9
+      num_classes: &num_classes 3
+      num_anchors: &num_anchors 9
       conv_channels:
         - [48, 48, 48, 48, 48]
         - [48, 48, 48, 48, 48]
         - [48, 48, 48, 48, 48]
         - [48, 48, 48, 48, 48]
         - [48, 48, 48, 48, 48]
+      in_names: ["p3", "p4", "p5", "p6", "p7"]
+      out_names: ["logits", "regress"]
 
-  ANCHOR_GENERATOR:
-    OFFSET: 0.5
-    SIZES: [
-      [32, 46.151986249837066, 66.56268233766093],
-      [96, 138.45595874951118, 199.6880470129828],
-      [320, 461.5198624983707, 665.6268233766093]
-    ]
-    ASPECT_RATIOS: [
-      [0.5, 1., 2.],
-      [0.5, 1., 2.],
-      [0.5, 1., 2.]
-    ]
-  
   PREDICT:
+    ANCHORS: *ANCHORS
+    NUM_ANCHORS: *num_anchors
+    NUM_CLASSES: *num_classes
     NUM_OUTPUTS: 100
-    SCORE_THRESHOLD: 0.1
-    IOU_THRESHOLD: 0.5
+    SCORE_THRESHOLDS: [0.1, 0.1, 0.1]
+    IOU_THRESHOLD: 0.3
+    INPUT_SIZE: *INPUT_SIZE 
 
 CRITERION:
   NAME: "RetinaNetCriterion"
@@ -96,5 +115,44 @@ CRITERION:
   FOCAL_LOSS_GAMMA: 2.0
   FOCAL_LOSS_ALPHA: 0.25
   BBOX_REG_LOSS_TYPE: "smooth_l1"
-  SMOOTH_L1_LOSS_BETA: 0.1
+  ANCHORS: *ANCHORS
+  NUM_CLASSES: *num_classes
+  NUM_ANCHORS: *num_anchors
   
+SOLVER:
+  MAX_EPOCHS: 30
+  BASE_LR: 0.1
+  MOMENTUM: 0.9
+  WEIGHT_DECAY: 0.0001
+  NESTEROV: False
+
+MISC:
+  WITH_AMP: False
+  ASP: False
+
+EVALUATOR:
+  NAME: "COCOEvaluator"
+  TEST_OUTPUT: "data/outputs"
+  MAX_DETS: 100
+  ANNOTATION: *TEST_ANNOTATION
+  INPUT_SIZE: *INPUT_SIZE
+  INTERVAL: 1
+  METRIC_NAME: &METRIC_NAME "AP"
+
+VISUALIZE:
+  NAME: RetinaNetVisualizer
+  NUM_SAMPLES: 1
+  CLASSES_NAME: ["Car", "Cyclist", "Pedestrian"]
+  CLASSES_COLOR: [
+    [255, 0, 0],
+    [0, 255, 0],
+    [0, 0, 255]
+  ]
+  INPUT_SIZE: *INPUT_SIZE
+  
+SAVE:
+  OUTPUT_PATH: "data/runs"
+  TEST_SCORE: *METRIC_NAME
+  RESUME: null
+  NUM_CHECKPOINTS: 20
+  INTERVAL: 5

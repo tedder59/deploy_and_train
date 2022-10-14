@@ -32,4 +32,12 @@ def build_criterion(cfg):
     name = cfg.NAME
     return CRITERION_REGISTRY.get(name)(cfg)
 
-    
+
+VISUALIZER_REGISTRY = Registry("VISUALIZER")
+VISUALIZER_REGISTRY.__doc__ = """
+Registry for visualizer, output images to log into tensorboard.
+"""
+
+def get_visualizer(cfg):
+    name = cfg.NAME
+    return VISUALIZER_REGISTRY.get(name)(cfg)

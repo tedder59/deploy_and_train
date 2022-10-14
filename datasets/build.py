@@ -17,6 +17,12 @@ TRANSFORM_REGISTRY.__doc__ = """
 Registry for DATASET transform
 """
 
+EVALUATOR_REGISTRY = Registry("EVALUATOR")
+EVALUATOR_REGISTRY.__doc__ = """
+Registry dataset evaluator.
+"""
+
+
 def build_dataset(cfg, split):
     name = cfg.NAME
     split = split.upper()
@@ -47,3 +53,8 @@ def build_transform(cfg):
             return data
 
     return Pipeline(cfg)
+
+
+def build_eval(cfg):
+    name = cfg.NAME
+    return EVALUATOR_REGISTRY.get(name)(cfg)
