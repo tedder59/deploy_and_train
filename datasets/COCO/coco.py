@@ -89,7 +89,7 @@ class COCOTrainCollator:
 
 
 @COLLATE_REGIESTRY.register()
-class COCOTestCollator:
+class COCOValCollator:
     def __init__(self, cfg):
         self.trans = transforms.Compose([
             transforms.ToTensor(),
@@ -103,10 +103,23 @@ class COCOTestCollator:
         return images, ids
 
 
+@COLLATE_REGIESTRY.register()
+class COCOTestCollator:
+    def __init__(self, cfg):
+        self.trans = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(cfg.PIXEL_MEAN, cfg.PIXEL_STD)
+        ])
+
+    def __call__(self, batch):
+        images = torch.stack([self.trans(x['image']) for x in batch])
+        return images
+
+
 @EVALUATOR_REGISTRY.register()
 class COCOEvaluator:
     def __init__(self, cfg):
-        self.output_dir = cfg.TEST_OUTPUT
+        self.output_dir = cfg.VAL_OUTPUT
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 

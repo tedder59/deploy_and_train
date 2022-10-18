@@ -1,26 +1,24 @@
 import os
-
-from modules.build import build_model
 with_torch_launch = "WORLD_SIZE" in os.environ
 
 from datasets import CommonMetric, build_dataset, get_collate_wrapper
+from modules.build import build_model
 from configs import Config
 
 from ignite.contrib.handlers import ProgressBar
 from ignite.engine import create_supervised_evaluator
 import ignite.distributed as idist
 
-from torch.cuda.amp import autocast
 import argparse
 import torch
 
 
 def get_dataflow(cfg):
-    dataset = build_dataset(cfg.DATASET, "TEST")
+    dataset = build_dataset(cfg.DATASET, "VAL")
     if idist.get_rank() == 0:
         idist.barrier()
 
-    ccfg = cfg.DATALOADER.TEST
+    ccfg = cfg.DATALOADER.VAL
     dataloader = idist.auto_dataloader(
         dataset, batch_size=ccfg.BATCH_SIZE,
         num_workers=ccfg.NUM_WORKERS,
@@ -93,9 +91,9 @@ if __name__ == "__main__" and with_torch_launch:
 
     Multi nodes with multi GPUS
     node 0:
-        torchrun --nnodes=2 --node_rank=0 --master_addr=master_ip --master_port=3344 --nproc_per_node=4 train.py -- --config xxx
+        torchrun --nnodes=2 --node_rank=0 --master_addr=master_ip --master_port=59344 --nproc_per_node=4 train.py -- --config xxx
     node 1:
-        torchrun --nnodes=2 --node_rank=1 --master_addr=master_ip --master_port=3344 --nproc_per_node=4 train.py -- --config xxx
+        torchrun --nnodes=2 --node_rank=1 --master_addr=master_ip --master_port=59344 --nproc_per_node=4 train.py -- --config xxx
     """
     assert torch.cuda.is_available(), "cuda invalid!"
     assert torch.backends.cudnn.is_available(), "cudnn invalid!"

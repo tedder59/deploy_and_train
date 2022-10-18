@@ -21,7 +21,7 @@ import torch
 
 def get_dataflow(cfg):
     train_dataset = build_dataset(cfg.DATASET, "TRAIN")
-    test_dataset = build_dataset(cfg.DATASET, "TEST")
+    val_dataset = build_dataset(cfg.DATASET, "VAL")
 
     if idist.get_rank() == 0:
         idist.barrier()
@@ -34,18 +34,18 @@ def get_dataflow(cfg):
         shuffle=True, drop_last=True
     )
 
-    ccfg = cfg.DATALOADER.TEST
-    test_dataloader = idist.auto_dataloader(
-        test_dataset, batch_size=ccfg.BATCH_SIZE,
+    ccfg = cfg.DATALOADER.VAL
+    val_dataloader = idist.auto_dataloader(
+        val_dataset, batch_size=ccfg.BATCH_SIZE,
         num_workers=ccfg.NUM_WORKERS,
         collate_fn=get_collate_wrapper(ccfg.COLLATE_FN),
         shuffle=False, drop_last=False
     )
 
-    return train_dataloader, test_dataloader
+    return train_dataloader, val_dataloader
 
 
-def create_trainer(cfg, train_loader, test_loader):
+def create_trainer(cfg, train_loader, val_loader):
     model = build_model(cfg.MODEL)
     model = idist.auto_model(model)
     criterion = build_criterion(cfg.CRITERION)
@@ -68,7 +68,6 @@ def create_trainer(cfg, train_loader, test_loader):
         ASP.prune_trained_model(model, optimizer)
 
     def train_step(engine, batch):
-        model.train()
         x, y = model.prepare_train_batch(batch)
         with autocast(enabled=with_amp):
             outs = model(x)
@@ -87,6 +86,7 @@ def create_trainer(cfg, train_loader, test_loader):
 
     trainer = Engine(train_step)
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
+    trainer.add_event_handler(Events.EPOCH_STARTED, lambda: model.train())
     trainer.add_event_handler(Events.EPOCH_COMPLETED, lambda: lr_scheduler.step())
     trainer.add_event_handler(Events.EPOCH_COMPLETED, empty_cuda_cache)
 
@@ -112,7 +112,7 @@ def create_trainer(cfg, train_loader, test_loader):
     @trainer.on(events)
     def eval():
         model.eval()
-        evaluator.run(test_loader)
+        evaluator.run(val_loader)
         empty_cuda_cache()
 
     ccfg = cfg.SAVE
@@ -121,7 +121,7 @@ def create_trainer(cfg, train_loader, test_loader):
             dirname=ccfg.get("OUTPUT_PATH", "data/runs"),
             filename_prefix=cfg.MODEL.META_ARCHITECTURE,
             require_empty=False,
-            score_name=ccfg.TEST_SCORE
+            score_name=ccfg.VAL_SCORE
         )
 
         evaluator.add_event_handler(
@@ -149,7 +149,7 @@ def create_trainer(cfg, train_loader, test_loader):
 
     if ccfg.get('RESUME', None) is not None:
         print(f'resume form: {ccfg.RESUME}')
-        checkpoint = torch.load(ccfg.resume, map_location='cpu')
+        checkpoint = torch.load(ccfg.RESUME, map_location='cpu')
         Checkpoint.load_objects(to_load=to_save, checkpoint=checkpoint)
 
     evaluators = {
@@ -163,9 +163,9 @@ def create_trainer(cfg, train_loader, test_loader):
     return trainer, evaluators, optimizers, visualize_handler
 
 def train(local_rank, cfg):
-    train_loader, test_loader = get_dataflow(cfg)
+    train_loader, val_loader = get_dataflow(cfg)
     trainer, evaluators, optimizers, visualize_handler =\
-        create_trainer(cfg, train_loader, test_loader)
+        create_trainer(cfg, train_loader, val_loader)
 
     if local_rank == 0:
         tb_logger = common.setup_tb_logging(
@@ -221,9 +221,9 @@ if __name__ == "__main__" and with_torch_launch:
 
     Multi nodes with multi GPUS
     node 0:
-        torchrun --nnodes=2 --node_rank=0 --master_addr=master_ip --master_port=3344 --nproc_per_node=4 train.py -- --config xxx
+        torchrun --nnodes=2 --node_rank=0 --master_addr=master_ip --master_port=59344 --nproc_per_node=4 train.py -- --config xxx
     node 1:
-        torchrun --nnodes=2 --node_rank=1 --master_addr=master_ip --master_port=3344 --nproc_per_node=4 train.py -- --config xxx
+        torchrun --nnodes=2 --node_rank=1 --master_addr=master_ip --master_port=59344 --nproc_per_node=4 train.py -- --config xxx
     """
     assert torch.cuda.is_available(), "cuda invalid!"
     assert torch.backends.cudnn.is_available(), "cudnn invalid!"
