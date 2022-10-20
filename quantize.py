@@ -29,7 +29,6 @@ from ignite.engine import Engine, Events
 import ignite.distributed as idist
 
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.cuda.amp import autocast, GradScaler
 import torch.optim as optim
 from tqdm import tqdm
 import argparse
