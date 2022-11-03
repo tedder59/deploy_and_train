@@ -22,11 +22,11 @@ class CommonMetric(Metric):
     @torch.no_grad()
     def update(self, output):
         y_pred, y = output
-        y_pred = [x.detach().cpu() for x in y_pred]
+        y_pred = [idist.all_gather(x) for x in y_pred]
+        y = idist.all_gather(y)
 
         if self._eval:
-            y_pred = [idist.all_gather(x) for x in y_pred]
-            y = idist.all_gather(y)
+            y_pred = [x.cpu() for x in y_pred]
             self._eval.process(y, y_pred)
 
     @idist.one_rank_only(rank=0)

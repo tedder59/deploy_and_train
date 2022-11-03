@@ -22,13 +22,13 @@ import torch
 def get_dataflow(cfg):
     train_dataset = build_dataset(cfg.DATASET, "TRAIN")
     val_dataset = build_dataset(cfg.DATASET, "VAL")
+    idist.barrier()
 
-    if idist.get_rank() == 0:
-        idist.barrier()
+    num_world = idist.get_world_size()
 
     ccfg = cfg.DATALOADER.TRAIN
     train_dataloader = idist.auto_dataloader(
-        train_dataset, batch_size=ccfg.BATCH_SIZE,
+        train_dataset, batch_size=ccfg.BATCH_SIZE * num_world,
         num_workers=ccfg.NUM_WORKERS,
         collate_fn=get_collate_wrapper(ccfg.COLLATE_FN),
         shuffle=True, drop_last=True
@@ -36,7 +36,7 @@ def get_dataflow(cfg):
 
     ccfg = cfg.DATALOADER.VAL
     val_dataloader = idist.auto_dataloader(
-        val_dataset, batch_size=ccfg.BATCH_SIZE,
+        val_dataset, batch_size=ccfg.BATCH_SIZE * num_world,
         num_workers=ccfg.NUM_WORKERS,
         collate_fn=get_collate_wrapper(ccfg.COLLATE_FN),
         shuffle=False, drop_last=False
@@ -68,7 +68,10 @@ def create_trainer(cfg, train_loader, val_loader):
         ASP.prune_trained_model(model, optimizer)
 
     def train_step(engine, batch):
-        x, y = model.prepare_train_batch(batch)
+        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+            x, y = model.module.prepare_train_batch(batch)
+        else:
+            x, y = model.prepare_train_batch(batch)
         with autocast(enabled=with_amp):
             outs = model(x)
             losses, log_dict = criterion(outs, y)
@@ -98,12 +101,19 @@ def create_trainer(cfg, train_loader, val_loader):
         "amp": scaler
     }
 
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        eval_prepare_batch = model.module.prepare_eval_batch
+        predict = model.module.predict
+    else:
+        eval_prepare_batch = model.prepare_eval_batch
+        predict = model.predict
+
     ccfg = cfg.EVALUATOR
     evaluator = create_supervised_evaluator(
         model, metrics = {ccfg.METRIC_NAME: CommonMetric(ccfg)},
         device=idist.device(),
-        prepare_batch=model.prepare_eval_batch,
-        output_transform=lambda x, y, y_pred: (model.predict(y_pred), y),
+        prepare_batch=eval_prepare_batch,
+        output_transform=lambda x, y, y_pred: (predict(y_pred), y),
         amp_mode='amp' if with_amp else None
     )
     events = Events.EPOCH_COMPLETED(every=ccfg.INTERVAL)
@@ -143,7 +153,10 @@ def create_trainer(cfg, train_loader, val_loader):
 
         ProgressBar().attach(trainer)
 
-        visualize_handler = create_visualizer(train_loader, model, cfg.VISUALIZE)
+        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+            visualize_handler = create_visualizer(train_loader, model.module, cfg.VISUALIZE)
+        else:
+            visualize_handler = create_visualizer(train_loader, model, cfg.VISUALIZE)
     else:
         visualize_handler = None
 

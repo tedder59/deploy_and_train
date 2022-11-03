@@ -353,13 +353,14 @@ class RetinaNetVisualizer:
         self.classes_name = cfg.CLASSES_NAME
         self.input_size = cfg.INPUT_SIZE
         self.classes_color = cfg.CLASSES_COLOR
+        self.num_images = cfg.NUM_IMAGES
 
     def __call__(self, batch, outs):
         images_file = batch[3]
         outs = outs[0].detach().cpu()
 
         out_dict = {}
-        for image_file, pred in zip(images_file, outs):
+        for i, image_file, pred in zip(range(self.num_images), images_file, outs):
             im = cv2.imread(image_file, cv2.IMREAD_COLOR)
             h, w = im.shape[:2]
             sx = float(w) / self.input_size[1]

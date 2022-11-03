@@ -48,7 +48,7 @@ DATASET:
 
 DATALOADER:
   TRAIN:
-    BATCH_SIZE: 8
+    BATCH_SIZE: 16
     NUM_WORKERS: 8
     COLLATE_FN:
       NAME: "COCOTrainCollator"
@@ -56,7 +56,7 @@ DATALOADER:
       PIXEL_STD: [0.229, 0.224, 0.225]
 
   VAL:
-    BATCH_SIZE: 16
+    BATCH_SIZE: 32
     NUM_WORKERS: 8
     COLLATE_FN:
       NAME: "COCOValCollator"
@@ -64,7 +64,7 @@ DATALOADER:
       PIXEL_STD: [0.229, 0.224, 0.225]
 
   TEST:
-    BATCH_SIZE: 16
+    BATCH_SIZE: 32
     NUM_WORKERS: 8
     COLLATE_FN:
       NAME: "COCOTestCollator"
@@ -76,7 +76,6 @@ MODEL:
   MODULES:
     -
       NAME: "MobileNetV3"
-      pretrained: "data/mobilenet_v3_small-047dcff4.pth"
       base_channels: 16
       inverted_residuals:
         - [16, 3, 16, 16, True, False, 2, 1]
@@ -137,7 +136,7 @@ CRITERION:
   
 SOLVER:
   MAX_EPOCHS: 30
-  BASE_LR: 0.1
+  BASE_LR: 0.01
   MOMENTUM: 0.9
   WEIGHT_DECAY: 0.0001
   NESTEROV: False
@@ -158,6 +157,7 @@ EVALUATOR:
 VISUALIZE:
   NAME: RetinaNetVisualizer
   NUM_SAMPLES: 1
+  NUM_IMAGES: 4
   CLASSES_NAME: ["Car", "Cyclist", "Pedestrian"]
   CLASSES_COLOR: [
     [255, 0, 0],
@@ -172,4 +172,4 @@ SAVE:
   RESUME: null
   NUM_CHECKPOINTS: 20
   INTERVAL: 5
-  PTQ: "data/runs/RetinaNet_PTQ.pt"
+  PTQ: null
