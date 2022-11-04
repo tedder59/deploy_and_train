@@ -87,11 +87,19 @@ def create_trainer(cfg, train_loader, val_loader):
         import gc
         gc.collect()
 
+    def distributed_sampler_shuffle(engine):
+        train_loader.sampler.set_epoch(engine.state.epoch)
+
     trainer = Engine(train_step)
+    trainer.state_dict_user_keys.append("epoch")
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
     trainer.add_event_handler(Events.EPOCH_STARTED, lambda: model.train())
     trainer.add_event_handler(Events.EPOCH_COMPLETED, lambda: lr_scheduler.step())
     trainer.add_event_handler(Events.EPOCH_COMPLETED, empty_cuda_cache)
+
+    if idist.get_world_size() > 1:
+        trainer.add_event_handler(Events.EPOCH_STARTED,
+                                  distributed_sampler_shuffle)
 
     to_save = {
         "model": model,
