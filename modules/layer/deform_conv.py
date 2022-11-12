@@ -66,55 +66,63 @@ import math
 #         return deform_conv2d(input, offset, mask, self.weight, self.bias)
 
 
-class DCN(DeformConv2d):
+class DCN(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size,
                  stride=1, padding=0, dilation=1, groups=1,
                  bias=True):
-        super().__init__(in_channels, out_channels, kernel_size,
-                         stride, padding, dilation, groups, bias)
+        super().__init__()
         
         self.conv_offset = nn.Conv2d(
-            self.in_channels,
-            self.groups * 2 * self.kernel_size[0] * self.kernel_size[1],
-            kernel_size=self.kernel_size,
-            stride=self.stride, padding=self.padding,
-            bias=True
+            in_channels,
+            groups * 2 * kernel_size * kernel_size,
+            kernel_size=kernel_size,
+            stride=stride, padding=padding,
+            dilation=dilation, bias=True
         )
+
+        self.deform = DeformConv2d(in_channels, out_channels, kernel_size,
+                                   stride, padding, dilation, groups, bias)
 
         self.reset_offset()
 
     def reset_offset(self):
-        self.conv_offset.weight.zero_()
-        self.conv_offset.bias.zero_()
+        nn.init.zeros_(self.conv_offset.weight)
+        nn.init.zeros_(self.conv_offset.bias)
 
     def forward(self, input):
         offset = self.conv_offset(input)
-        return DeformConv2d.forward(self, input, offset, None)
+        out = self.deform(input, offset, None)
+        return out
 
 
-class DCNV2(DCN):
+class DCNV2(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size,
                  stride=1, padding=0, dilation=1, groups=1,
                  bias=True):
-        super().__init__(in_channels, out_channels, kernel_size,
-                         stride, padding, dilation, groups, bias)
+        super().__init__()
 
-        self.conv_mask = nn.Conv2d(
-            self.in_channels,
-            self.groups * self.kernel_size[0] * self.kernel_size[1],
-            kernel_size=self.kernel_size,
-            stride=self.stride, padding=self.padding,
-            bias=True
+        self.conv_offset_mask = nn.Conv2d(
+            in_channels,
+            groups * kernel_size * kernel_size * 3,
+            kernel_size=kernel_size,
+            stride=stride, padding=padding,
+            dilation=dilation, bias=True
         )
+
+        self.deform = DeformConv2d(in_channels, out_channels, kernel_size,
+                                   stride, padding, dilation, groups, bias)
+
 
         self.reset_mask()
 
     def reset_mask(self):
-        self.conv_mask.weight.zero_()
-        self.conv_mask.bias.zero_()
+        nn.init.zeros_(self.conv_offset_mask.weight)
+        nn.init.zeros_(self.conv_offset_mask.bias)
 
     def forward(self, input):
-        offset = self.conv_offset(input)
-        mask = self.conv_mask(input)
+        offset_mask = self.conv_offset_mask(input)
+        o1, o2, mask = torch.chunk(offset_mask, 3, dim=1)
+        offset = torch.cat([o1, o2], dim=1)
         mask = torch.sigmoid(mask)
-        return DeformConv2d.forward(self, input, offset, mask)
+        out = self.deform(input, offset, mask)
+        return out
