@@ -78,9 +78,6 @@ def compute_amax(model, **kwargs):
 
 def get_training_dataflow(cfg):
     train_dataset = build_dataset(cfg.DATASET, "TRAIN")
-    if idist.get_rank() == 0:
-        idist.barrier()
-
     ccfg = cfg.DATALOADER.TRAIN
     train_dataloader = idist.auto_dataloader(
         train_dataset, batch_size=ccfg.BATCH_SIZE,
@@ -90,9 +87,6 @@ def get_training_dataflow(cfg):
     )
 
     val_dataset = build_dataset(cfg.DATASET, "VAL")
-    if idist.get_rank() == 0:
-        idist.barrier()
-
     ccfg = cfg.DATALOADER.VAL
     val_dataloader = idist.auto_dataloader(
         val_dataset, batch_size=ccfg.BATCH_SIZE,
@@ -101,6 +95,7 @@ def get_training_dataflow(cfg):
         shuffle=False, drop_last=False
     )
 
+    idist.barrier()
     return train_dataloader, val_dataloader
 
 

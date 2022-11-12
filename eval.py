@@ -15,8 +15,7 @@ import torch
 
 def get_dataflow(cfg):
     dataset = build_dataset(cfg.DATASET, "VAL")
-    if idist.get_rank() == 0:
-        idist.barrier()
+    idist.barrier()
 
     ccfg = cfg.DATALOADER.VAL
     dataloader = idist.auto_dataloader(

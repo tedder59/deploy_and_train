@@ -1,4 +1,3 @@
-from curses import wrapper
 from pytorch_quantization import nn as quant_nn
 from pytorch_quantization.tensor_quant import QuantDescriptor
 
@@ -32,31 +31,38 @@ inline_sources = """
 #include <torch/script.h>
 #include <tuple>
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> efficient_nms(
-    const torch::Tensor& regress, const torch::Tensor& logits,
-    const torch::Tensor& anchors, double conf_thr,
-    double iou_thr, int64_t max_output_num,
-    int64_t num_classes
-) {
-    int batch_size = regress.size(0);
-
-    auto options = torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA);
-    auto num_detections = torch::empty({batch_size, 1}, options);
-    auto detection_classes = torch::empty({batch_size, max_output_num}, options);
-
-    options = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
-    auto detection_boxes = torch::empty({batch_size, max_output_num, 4}, options);
-    auto detection_scores = torch::empty({batch_size, max_output_num}, options);
+torch::Tensor box2d_decode(const torch::Tensor& anchors,
+                           const torch::Tensor& regress)
+{
+    const int box_dim = 4;
+    int num_anchors = anchors.size(0);
+    auto options = torch::TensorOptions().dtype(torch::kFloat32)
+                                         .device(torch::kCUDA);
     
-    return std::make_tuple(num_detections, detection_boxes,
-                           detection_scores, detection_classes);
+    auto bboxes = torch::empty({num_anchors, box_dim}, options);
+    return bboxes;
+}
+
+torch::Tensor batch_cls_nms_2d(const torch::Tensor& batch_idxes,
+                               const torch::Tensor& cats,
+                               const torch::Tensor& scores,
+                               const torch::Tensor& bboxes,
+                               int64_t batch_num,
+                               double iou_thr,
+                               double max_edge,
+                               int64_t max_output_num)
+{
+    const int box_dim = 6;
+    auto options = torch::TensorOptions().dtype(torch::kFloat32)
+                                         .device(torch::kCUDA);
+    return torch::empty({batch_num, max_output_num, box_dim});
 }
 
 TORCH_LIBRARY(custom_ops, m) {
-    m.def("efficient_nms", &efficient_nms);
+    m.def("box2d_decode", &box2d_decode);
+    m.def("batch_cls_nms_2d", &batch_cls_nms_2d);
 }
 """
-
 cpp_extension.load_inline(
     name="inline_extensions",
     cpp_sources=inline_sources,
@@ -64,19 +70,31 @@ cpp_extension.load_inline(
     verbose=True
 )
 
-@parse_args('v', 'v', 'v', 'f', 'f', 'i', 'i')
-def symbolic_efficient_nms(g, regress, scores, anchors, conf_thr, iou_thr, max_output_num, num_classes):
-    return g.op('custom_domain::EfficientNMS_TRT',
-                regress, scores, anchors,
-                score_threshold_f=conf_thr,
-                iou_thresholod_f=iou_thr,
-                max_output_boxes_i=max_output_num,
-                background_class_i=num_classes,
-                score_activation_i=0,
-                box_coding_i=0,
-                outputs=4)
 
-register_custom_op_symbolic("custom_ops::efficient_nms", symbolic_efficient_nms, 13)
+@parse_args('v', 'v')
+def symbolic_box2d_decode(g, anchors, regress):
+    return g.op('custom_domain::Box2dDecode',
+                anchors, regress);
+
+
+register_custom_op_symbolic("custom_ops::box2d_decode",
+                            symbolic_box2d_decode, 13)
+
+
+@parse_args('v', 'v', 'v', 'v', 'i', 'f', 'f', 'i')
+def symbolic_efficient_nms(g, batch_idxes, cats, scores, bboxes,
+                           batch_size, iou_thr, max_edge,
+                           max_output_num):
+    return g.op('custom_domain::BatchClsNMS2d',
+                batch_idxes, cats, scores, bboxes, batch_size,
+                iou_thr_f=iou_thr,
+                max_edge_f=max_edge,
+                max_output_num_i=max_output_num)
+
+
+register_custom_op_symbolic("custom_ops::batch_cls_nms_2d",
+                            symbolic_efficient_nms, 13)
+
 
 class Wrapper(nn.Module):
     def __init__(self, model, conf_thr, iou_thr,
@@ -90,6 +108,7 @@ class Wrapper(nn.Module):
         self.num_classes = num_classes
 
         self.anchors = self.model.anchors.tile(batch_size, 1, 1)
+        self.max_edge = float(max(self.model.input_size))
 
     def forward(self, x):
         outs = self.model(x)
@@ -99,7 +118,7 @@ class Wrapper(nn.Module):
             x.reshape(-1, self.model.num_anchors * self.model.num_classes, s)\
              .permute(0, 2, 1)\
              .reshape(-1, s * self.model.num_anchors, self.model.num_classes)
-        
+
         logits = [fn(x, s) for x, s in zip(logits, self.model.spatials)]
         logits = torch.cat(logits, dim=1)
 
@@ -107,30 +126,32 @@ class Wrapper(nn.Module):
             x.reshape(-1, self.model.num_anchors * 4, s)\
              .permute(0, 2, 1)\
              .reshape(-1, s * self.model.num_anchors, 4)
-        
+
         regress = [fn(x, s) for x, s in zip(regress, self.model.spatials)]
         regress = torch.cat(regress, dim=1)
+        scores = logits.sigmoid_()
 
-        logits = logits.sigmoid_()
-        # mask = torch.greater_equal(logits, self.conf_thr)
-        # mask = torch.any(mask, dim=2)
-        # mask = mask.tile(1, 1, self.model.num_classes)
+        mask = torch.greater_equal(scores, self.conf_thrs)
+        mask = torch.any(mask, dim=2, keepdim=True)
 
-        # logits = logits[mask]
-        # regress = regress[mask]
+        batch_num = logits.shape[0]
+        batch_anchors = self.anchors.tile(batch_num, 1, 1)
+        scores = scores[mask]
+        regress = regress[mask]
+        anchors = batch_anchors[mask]
 
-        num_dets, det_boxes, det_scores, det_classes = \
-            torch.ops.custom_ops.efficient_nms(
-                regress, logits, self.anchors, self.conf_thr, self.iou_thr,
-                self.max_output_num, self.num_classes
-            )
-        
-        det_classes = det_classes.to(det_boxes.dtype)
-        dets = torch.cat(
-            [det_classes[..., None], det_scores[..., None], det_boxes],
-            dim=2
+        anchor_num = logits.shape[1]
+        batch_idxes = torch.arange(batch_num)[..., None]
+        batch_idxes = batch_idxes.tile(1, anchor_num)[mask]
+
+        scores, cats = scores.max(dim=1)
+        bboxes = torch.ops.custom_ops.box2d_decode(anchors, regress)
+        dets = torch.ops.custom_ops.batch_cls_nms_2d(
+            batch_idxes, cats, scores, bboxes, batch_num,
+            self.iou_thr, self.max_edge, self.max_output_num
         )
-        return num_dets, dets
+
+        return dets, outs[0], outs[1]
 
 
 if __name__ == "__main__":
@@ -151,7 +172,7 @@ if __name__ == "__main__":
     ccfg = cfg.MODEL
     input_size = ccfg.PREDICT.INPUT_SIZE
     model = RetinaNet(ccfg)
-    
+
     ccfg = cfg.SAVE
     ckpt = torch.load(ccfg.RESUME, map_location='cpu')
     model.load_state_dict(ckpt['model'])

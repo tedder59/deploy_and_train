@@ -6,11 +6,11 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from pycocotools.cocoeval import COCOeval
 from pycocotools.coco import COCO
+import ujson as json
 import numpy as np
 import itertools
 import torch
 import copy
-import json
 import os
 
 

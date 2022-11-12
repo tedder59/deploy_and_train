@@ -91,7 +91,6 @@ def create_trainer(cfg, train_loader, val_loader):
         train_loader.sampler.set_epoch(engine.state.epoch)
 
     trainer = Engine(train_step)
-    trainer.state_dict_user_keys.append("epoch")
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
     trainer.add_event_handler(Events.EPOCH_STARTED, lambda: model.train())
     trainer.add_event_handler(Events.EPOCH_COMPLETED, lambda: lr_scheduler.step())
