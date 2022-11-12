@@ -76,6 +76,7 @@ MODEL:
   MODULES:
     -
       NAME: "MobileNetV3"
+      pretrained: "data/mobilenet_v3_small-047dcff4.pth"
       base_channels: 16
       inverted_residuals:
         - [16, 3, 16, 16, True, False, 2, 1]
@@ -135,7 +136,7 @@ CRITERION:
   NUM_ANCHORS: *num_anchors
   
 SOLVER:
-  MAX_EPOCHS: 30
+  MAX_EPOCHS: 600
   BASE_LR: 0.01
   MOMENTUM: 0.9
   WEIGHT_DECAY: 0.0001
@@ -167,7 +168,7 @@ VISUALIZE:
   INPUT_SIZE: *INPUT_SIZE
   
 SAVE:
-  OUTPUT_PATH: "data/runs"
+  OUTPUT_PATH: "data/1104-m"
   VAL_SCORE: *METRIC_NAME
   RESUME: null
   NUM_CHECKPOINTS: 20

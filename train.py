@@ -87,8 +87,8 @@ def create_trainer(cfg, train_loader, val_loader):
         import gc
         gc.collect()
 
-    def distributed_sampler_shuffle(engine):
-        train_loader.sampler.set_epoch(engine.state.epoch)
+    def distributed_sampler_shuffle():
+        train_loader.sampler.set_epoch(trainer.state.epoch)
 
     trainer = Engine(train_step)
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
@@ -99,13 +99,12 @@ def create_trainer(cfg, train_loader, val_loader):
     if idist.get_world_size() > 1:
         trainer.add_event_handler(Events.EPOCH_STARTED,
                                   distributed_sampler_shuffle)
-
     to_save = {
         "model": model,
         "optimizer": optimizer,
         "lr_scheduler": lr_scheduler,
         "trainer": trainer,
-        "amp": scaler
+        "amp": scaler,
     }
 
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):

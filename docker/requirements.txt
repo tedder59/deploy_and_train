@@ -2,3 +2,4 @@ fvcore==0.1.5.post20220512
 opencv-python==4.5.5.64
 pytorch-ignite==0.4.10
 imgaug==0.4.0
+ujson

@@ -1,6 +1,6 @@
 # Copyright (c) 2022 by zhuxiaolong, All rights Reserved.
 from ..build import MODULE_REGISTRY
-# from ..layer.deform_conv import DCN, DCNV2
+from ..layer.deform_conv import DCN, DCNV2
 from torch.nn import Conv2d
 import torch.nn as nn
 import numpy as np
