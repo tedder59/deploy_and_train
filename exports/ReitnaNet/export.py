@@ -22,7 +22,7 @@ import os
 
 
 from importmagician import import_from
-with import_from(f'{os.path.dirname(__file__)}/../..'):
+with import_from(f'{os.path.dirname(os.path.abspath(__file__))}/../..'):
     from modules.meta_arch.retinanet import RetinaNet
     from configs import Config
 

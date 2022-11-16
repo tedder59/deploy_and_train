@@ -23,24 +23,24 @@ DATASET:
 
 DATALOADER:
   TRAIN:
-    BATCH_SIZE: 16
-    NUM_WORKERS: 8
+    BATCH_SIZE: 4
+    NUM_WORKERS: 4
     COLLATE_FN:
       NAME: "COCOTrainCollator"
       PIXEL_MEAN: &PIXEL_MEAN [0.40789654, 0.44719302, 0.47026115]
       PIXEL_STD: &PIXEL_STD [0.28863828, 0.27408164, 0.27809835]
 
   VAL:
-    BATCH_SIZE: 32
-    NUM_WORKERS: 8
+    BATCH_SIZE: 8
+    NUM_WORKERS: 4
     COLLATE_FN:
       NAME: "COCOValCollator"
       PIXEL_MEAN: *PIXEL_MEAN
       PIXEL_STD: *PIXEL_STD
 
   TEST:
-    BATCH_SIZE: 32
-    NUM_WORKERS: 8
+    BATCH_SIZE: 8
+    NUM_WORKERS: 4
     COLLATE_FN:
       NAME: "COCOTestCollator"
       PIXEL_MEAN: *PIXEL_MEAN
@@ -52,8 +52,7 @@ MODEL:
     -
       NAME: "DLASeg"
       base_name: "dla34"
-      conv_name: "DCNV2"
-      pretrained: "data/dla34-ba72cf86.pth"
+      conv_name: "DCN"
     -
       NAME: "CenterNetHead"
       in_channels: 64
@@ -78,6 +77,7 @@ MODEL:
     NUM_CLASSES: *NUM_CLASSES
     NUM_OUTPUTS: 100
     SCORE_THRESHOLDS: [0.1, 0.1, 0.1]
+    INPUT_SIZE: *INPUT_SIZE
     OUTPUT_SIZE: &OUTPUT_SIZE [96, 288]
 
 CRITERION:
@@ -95,8 +95,8 @@ CRITERION:
   NUM_OUTPUTS: 128
   
 SOLVER:
-  MAX_EPOCHS: 60
-  BASE_LR: 0.01
+  MAX_EPOCHS: 100
+  BASE_LR: 0.002
   MOMENTUM: 0.9
   WEIGHT_DECAY: 0.0001
   NESTEROV: False
@@ -127,9 +127,9 @@ VISUALIZE:
   INPUT_SIZE: *OUTPUT_SIZE
   
 SAVE:
-  OUTPUT_PATH: "data/1112_cd"
+  OUTPUT_PATH: "data/1113_cd"
   VAL_SCORE: *METRIC_NAME
-  RESUME: null
+  RESUME: "data/1113_cd/CenterNet_checkpoint_AP=0.4556.pt"
   NUM_CHECKPOINTS: 20
   INTERVAL: 2
   PTQ: null

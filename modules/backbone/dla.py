@@ -267,7 +267,7 @@ def dla34(**kwargs):
                 [16, 32, 64, 128, 256, 512],
                 block=BasicBlock)
 
-    if 'pretrained' in kwargs:
+    if kwargs['pretrained'] is not None:
         checkpoint = torch.load(kwargs['pretrained'])
         model.load_state_dict(checkpoint, strict=False)
 
