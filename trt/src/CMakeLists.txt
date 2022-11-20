@@ -49,11 +49,10 @@ string(REGEX MATCH "[0-9]" TRT_MINOR ${TRT_TYPE_STRING})
 
 if(TRT_MAJOR GREATER_EQUAL 8)
     add_definitions(-DTRT8)
+    if(TRT_MINOR GREATER 3)
+        add_definitions(-DTENSORRT_MEMORY_POOL)
+    endif(TRT_MINOR GREATER 3)
 endif(TRT_MAJOR GREATER_EQUAL 8)
-
-if(TRT_MINOR GREATER_EQUAL 3)
-    add_definitions(-DTRT8_3)
-endif(TRT_MINOR GREATER_EQUAL 3)
 
 include_directories("${TRT_INC_DIR}")
 find_library(NVINFER_LIB nvinfer HINTS ${TRT_LIB_DIR})
@@ -69,5 +68,6 @@ add_library(nvinfer_plugin SHARED IMPORTED)
 set_property(TARGET nvinfer_plugin PROPERTY IMPORTED_LOCATION ${NVINFER_PLUGIN_LIB})
 
 add_subdirectory(plugins)
-# add_subdirectory(builder)
-# add_subdirectory(infer)
+add_subdirectory(builder)
+add_subdirectory(infer)
+add_subdirectory(app)
