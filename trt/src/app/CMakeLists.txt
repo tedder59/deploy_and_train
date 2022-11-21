@@ -20,7 +20,7 @@ add_executable(bench benchmark.cpp)
 target_link_libraries(bench dt_infer dt_builder dt_plugin
                             nvinfer nvonnxparser
                             nvinfer_plugin cudart
-                            ${OpenCV_LIBS} benchmark
+                            benchmark
                             pthread)
 
 # centernet

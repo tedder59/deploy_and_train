@@ -29,35 +29,122 @@ using dt_infer::UniformManager;
 using dt_infer::ZeroCopyManager;
 using dt_infer::TrtEngine;
 
-const char* engine_filename = "cd.trt";
-const char* image_filename = "";
-std::unique_ptr<TrtEngine<SyncManager>> trt;
+const char* engine_filename = "cc.fp16.trt";
+std::unique_ptr<TrtEngine<SyncManager>> sync_trt;
+std::unique_ptr<TrtEngine<AsyncManager>> async_trt;
+std::unique_ptr<TrtEngine<UniformManager>> uniform_trt;
 
-static void DoSetup(const benchmark::State& state)
+#ifdef JETSON
+std::unique_ptr<TrtEngine<ZeroCopyManager>> zerocopy_trt;
+#endif	// JETSON
+
+__attribute((constructor)) void setDevice()
+{
+#ifdef JETSON
+    ZeroCopyManager m;
+#endif	// JETSON
+}
+
+static void syncSetup(const benchmark::State& state)
 {
     InferLogger& logger = InferLogger::getLogger();
     auto stream = dt_infer::makeCudaStream(logger);
+
     auto* manager = new SyncManager();
-    trt.reset(new TrtEngine<SyncManager>(logger, stream, manager));
-    assert(trt->loadEngine(engine_filename));
+
+    sync_trt.reset(new TrtEngine<SyncManager>(logger, stream, manager));
+    
+    assert(sync_trt->loadEngine(engine_filename));
 
     const int warmups = 10;
     for (int i = 0; i < warmups; ++i) {
-        trt->infer();
+        sync_trt->infer();
     }
 }
 
-static void DoTeardown(const benchmark::State& state)
+static void asyncSetup(const benchmark::State& state)
 {
-    trt.reset();
+    InferLogger& logger = InferLogger::getLogger();
+    auto stream = dt_infer::makeCudaStream(logger);
+
+    auto* manager = new AsyncManager(stream);
+
+    async_trt.reset(new TrtEngine<AsyncManager>(logger, stream, manager));
+    
+    assert(async_trt->loadEngine(engine_filename));
+
+    const int warmups = 10;
+    for (int i = 0; i < warmups; ++i) {
+        async_trt->infer();
+    }
 }
 
-static void infer(benchmark::State& s)
+static void uniformSetup(const benchmark::State& state)
+{
+    InferLogger& logger = InferLogger::getLogger();
+    auto stream = dt_infer::makeCudaStream(logger);
+
+    auto* manager = new UniformManager();
+
+    uniform_trt.reset(new TrtEngine<UniformManager>(logger, stream, manager));
+    
+    assert(uniform_trt->loadEngine(engine_filename));
+
+    const int warmups = 10;
+    for (int i = 0; i < warmups; ++i) {
+        uniform_trt->infer();
+    }
+}
+
+#ifdef JETSON
+
+static void zerocopySetup(const benchmark::State& state)
+{
+    InferLogger& logger = InferLogger::getLogger();
+    auto stream = dt_infer::makeCudaStream(logger);
+
+    auto* manager = new ZeroCopyManager();
+
+    zerocopy_trt.reset(new TrtEngine<ZeroCopyManager>(logger, stream, manager));
+    
+    assert(zerocopy_trt->loadEngine(engine_filename));
+
+    const int warmups = 10;
+    for (int i = 0; i < warmups; ++i) {
+        zerocopy_trt->infer();
+    }
+}
+
+#endif	// JETSON
+
+static void syncTeardown(const benchmark::State& state)
+{
+    sync_trt.reset();
+}
+
+static void asyncTeardown(const benchmark::State& state)
+{
+    async_trt.reset();
+}
+
+static void uniformTeardown(const benchmark::State& state)
+{
+    uniform_trt.reset();
+}
+
+#ifdef JETSON
+static void zerocopyTeardown(const benchmark::State& state)
+{
+    zerocopy_trt.reset();
+}
+#endif	// JETSON
+
+static void syncInfer(benchmark::State& s)
 {
     for (auto _ : s) {
         auto start = std::chrono::high_resolution_clock::now();
 
-        trt->infer();
+        sync_trt->infer();
         
         auto end = std::chrono::high_resolution_clock::now();
         auto elapsed_seconds = \
@@ -68,8 +155,78 @@ static void infer(benchmark::State& s)
     }
 }
 
-BENCHMARK(infer)->Threads(1)->Iterations(100)\
-                ->UseManualTime()\
-                ->Unit(benchmark::kMillisecond)\
-                ->Setup(DoSetup)->Teardown(DoTeardown);
+static void asyncInfer(benchmark::State& s)
+{
+    for (auto _ : s) {
+        auto start = std::chrono::high_resolution_clock::now();
+
+        async_trt->infer();
+        
+        auto end = std::chrono::high_resolution_clock::now();
+        auto elapsed_seconds = \
+            std::chrono::duration_cast<std::chrono::duration<double>>(
+                end - start
+            );
+        s.SetIterationTime(elapsed_seconds.count());
+    }
+}
+
+static void uniformInfer(benchmark::State& s)
+{
+    for (auto _ : s) {
+        auto start = std::chrono::high_resolution_clock::now();
+
+        uniform_trt->infer();
+        
+        auto end = std::chrono::high_resolution_clock::now();
+        auto elapsed_seconds = \
+            std::chrono::duration_cast<std::chrono::duration<double>>(
+                end - start
+            );
+        s.SetIterationTime(elapsed_seconds.count());
+    }
+}
+
+#ifdef JETSON
+
+static void zerocopyInfer(benchmark::State& s)
+{
+    for (auto _ : s) {
+        auto start = std::chrono::high_resolution_clock::now();
+
+        zerocopy_trt->infer();
+        
+        auto end = std::chrono::high_resolution_clock::now();
+        auto elapsed_seconds = \
+            std::chrono::duration_cast<std::chrono::duration<double>>(
+                end - start
+            );
+        s.SetIterationTime(elapsed_seconds.count());
+    }
+}
+
+#endif	// JETSON
+
+BENCHMARK(syncInfer)->Threads(1)->Iterations(100)\
+                    ->UseManualTime()\
+                    ->Unit(benchmark::kMillisecond)\
+                    ->Setup(syncSetup)->Teardown(syncTeardown);
+
+BENCHMARK(asyncInfer)->Threads(1)->Iterations(100)\
+                     ->UseManualTime()\
+                     ->Unit(benchmark::kMillisecond)\
+                     ->Setup(asyncSetup)->Teardown(asyncTeardown);
+
+BENCHMARK(uniformInfer)->Threads(1)->Iterations(100)\
+                       ->UseManualTime()\
+                       ->Unit(benchmark::kMillisecond)\
+                       ->Setup(uniformSetup)->Teardown(uniformTeardown);
+
+#ifdef JETSON
+BENCHMARK(zerocopyInfer)->Threads(1)->Iterations(100)\
+                        ->UseManualTime()\
+                        ->Unit(benchmark::kMillisecond)\
+                        ->Setup(zerocopySetup)->Teardown(zerocopyTeardown);
+#endif	// JETSON
+
 BENCHMARK_MAIN();

@@ -54,6 +54,10 @@ if(TRT_MAJOR GREATER_EQUAL 8)
     endif(TRT_MINOR GREATER 3)
 endif(TRT_MAJOR GREATER_EQUAL 8)
 
+if(Xavier OR Orin)
+    add_definitions(-DJETSON)
+endif(Xavier OR Orin)
+
 include_directories("${TRT_INC_DIR}")
 find_library(NVINFER_LIB nvinfer HINTS ${TRT_LIB_DIR})
 add_library(nvinfer SHARED IMPORTED)

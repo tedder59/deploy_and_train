@@ -214,6 +214,36 @@ private:
     std::shared_ptr<void> buffer_;
 };
 
+#define CUDA_CHECK(status)          \
+    do                              \
+    {                               \
+        auto ret = (status);        \
+	if (cudaSuccess != ret) {   \
+	    std::cerr << cudaGetErrorString(ret) << std::endl;	\
+	}			    \
+        assert(cudaSuccess == ret); \
+    } while (0)
+    
+static auto streamDeleter = [](cudaStream_t* s) {
+    if (s) {
+        CUDA_CHECK(cudaStreamDestroy(*s));
+        delete s;
+    }
+};
+
+using CudaStreamPtr = std::shared_ptr<cudaStream_t>;
+
+CudaStreamPtr makeCudaStream(nvinfer1::ILogger& logger)
+{
+    CudaStreamPtr stream(new cudaStream_t(), streamDeleter);
+    if (cudaSuccess != cudaStreamCreate(stream.get())) {
+        logger.log(Severity::kERROR, "create stream failed.");
+        stream.reset();
+    }
+
+    return stream;
+}
+
 class MemManager
 {
 public:
@@ -254,7 +284,7 @@ private:
 class AsyncManager : public MemManager
 {
 public:
-    AsyncManager(cudaStream_t stream);
+    AsyncManager(CudaStreamPtr stream);
     ~AsyncManager();
 
     bool init(nvinfer1::ICudaEngine* engine,
@@ -266,7 +296,7 @@ public:
     Blob* getBlob(const std::string& name) override;
 
 private:
-    cudaStream_t stream_;
+    CudaStreamPtr stream_;
 
     std::map<std::string, AsyncBlob*> blobs_dict_;
     std::vector<AsyncBlob*> input_blobs_;
@@ -317,33 +347,6 @@ private:
 
     static std::once_flag once_;
 };
-
-#define CUDA_CHECK(status)          \
-    do                              \
-    {                               \
-        auto ret = (status);        \
-        assert(cudaSuccess == ret); \
-    } while (0)
-    
-static auto streamDeleter = [](cudaStream_t* s) {
-    if (s) {
-        CUDA_CHECK(cudaStreamDestroy(*s));
-        delete s;
-    }
-};
-
-using CudaStreamPtr = std::shared_ptr<cudaStream_t>;
-
-CudaStreamPtr makeCudaStream(nvinfer1::ILogger& logger)
-{
-    CudaStreamPtr stream(new cudaStream_t(), streamDeleter);
-    if (cudaSuccess != cudaStreamCreate(stream.get())) {
-        logger.log(Severity::kERROR, "create stream failed.");
-        stream.reset();
-    }
-
-    return stream;
-}
 
 template <class MemManager>
 class TrtEngine

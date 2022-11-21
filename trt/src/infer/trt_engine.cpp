@@ -429,7 +429,7 @@ Blob* SyncManager::getBlob(const std::string& name)
     }
 }
 
-AsyncManager::AsyncManager(cudaStream_t stream)
+AsyncManager::AsyncManager(CudaStreamPtr stream)
     : stream_(stream)
 {
 
@@ -471,14 +471,14 @@ bool AsyncManager::init(nvinfer1::ICudaEngine* engine,
 void AsyncManager::copyIn()
 {
     for (auto* ptr : input_blobs_) {
-        ptr->copyIn(stream_);
+        ptr->copyIn(*stream_);
     }
 }
 
 void AsyncManager::copyOut()
 {
     for (auto* ptr : output_blobs_) {
-        ptr->copyOut(stream_);
+        ptr->copyOut(*stream_);
     }
 }
 
