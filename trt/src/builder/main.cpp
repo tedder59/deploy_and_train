@@ -17,6 +17,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 */
 #include "builder/builder.h"
+#include <cuda_runtime_api.h>
 #include <getopt.h>
 #include <cstdlib>
 #include <cassert>

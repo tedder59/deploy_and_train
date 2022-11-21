@@ -8,3 +8,7 @@ list(APPEND PLUGIN_SRCS plugin.cpp
 add_library(dt_plugin SHARED ${PLUGIN_SRCS})
 target_include_directories(dt_plugin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(dt_plugin nvinfer cudart)
+
+if(Xavier)
+target_compile_options(dt_plugin PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--generate-code=arch=compute_72,code=[compute_72,sm_72]>)
+endif()
