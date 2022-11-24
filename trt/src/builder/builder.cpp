@@ -1,7 +1,7 @@
 /***
  * Author: ZhuXiaolong
  * Date: 2022-11-17 11:11:12
- * LastEditTime: 2022-11-18 22:19:29
+ * LastEditTime: 2022-11-24 14:54:45
  * FilePath: /deploy_and_train/trt/src/builder/builder.cpp
  * Description: 
  * Copyright (c) 2022 by ZhuXiaolong, All Rights Reserved.
@@ -292,9 +292,10 @@ nvinfer1::ICudaEngine* Builder::build(const BuilderParam& params)
     }
 
     // Int8Calib
+    CalibratorPtr calibrator;
     if (params.calib_cfg.enable) {
         DataLoader dataloader;
-        CalibratorPtr calibrator (new Calibrator(
+        calibrator.reset(new Calibrator(
             params.calib_cfg.calib_cache_, dataloader
         ));
         config->setInt8Calibrator(calibrator.get());

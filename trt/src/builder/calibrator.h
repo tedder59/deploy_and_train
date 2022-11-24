@@ -1,7 +1,7 @@
 /***
  * Author: ZhuXiaolong
  * Date: 2022-11-17 13:26:08
- * LastEditTime: 2022-11-18 10:52:18
+ * LastEditTime: 2022-11-24 14:48:54
  * FilePath: /deploy_and_train/trt/src/builder/calibrator.h
  * Description: 
  * Copyright (c) 2022 by ZhuXiaolong, All Rights Reserved.
@@ -31,7 +31,7 @@ class DataLoader
 {
 public:
     DataLoader(int batch=1);
-    virtual int getBatchSize() const noexcept;
+    int getBatchSize() const noexcept;
     virtual bool next(int n, const char* names[],
                       void* bindings[]) noexcept;
                       
@@ -39,8 +39,7 @@ protected:
     int batch_size_;
 };
 
-template <class 
-, nvinfer1::CalibrationAlgoType algo>
+template <class DataLoader, nvinfer1::CalibrationAlgoType algo>
 class Int8Calibrator : public nvinfer1::IInt8Calibrator
 {
 public:

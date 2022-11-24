@@ -1,7 +1,7 @@
 /***
  * Author: ZhuXiaolong
  * Date: 2022-11-18 11:35:25
- * LastEditTime: 2022-11-20 08:08:38
+ * LastEditTime: 2022-11-24 09:57:39
  * FilePath: /deploy_and_train/trt/src/infer/trt_engine.h
  * Description: 
  * Copyright (c) 2022 by ZhuXiaolong, All Rights Reserved.
@@ -132,7 +132,7 @@ public:
     static size_t size(nvinfer1::DataType dtype,
                        const std::vector<int>& dims);
 
-protected:
+public:
     nvinfer1::DataType dtype_;
     std::vector<int> dims_;
     size_t size_;

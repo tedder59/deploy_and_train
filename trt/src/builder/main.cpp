@@ -1,7 +1,7 @@
 /***
  * Author: ZhuXiaolong
  * Date: 2022-11-17 17:41:34
- * LastEditTime: 2022-11-18 11:04:22
+ * LastEditTime: 2022-11-24 14:46:20
  * FilePath: /deploy_and_train/trt/src/builder/main.cpp
  * Description: 
  * Copyright (c) 2022 by ZhuXiaolong, All Rights Reserved.
@@ -44,11 +44,11 @@ void print_usage()
          << "   [--fp16] (use fp16 tensor core)" << "\n"
          << "   [--int8] (user int8 tensor core)" << "\n"
          << "   [--workspace] (workspace size: MB)" << "\n"
-         << "   [--calib_cache] (int8 ptq calib cache file)" << "\n"
+         << "   [--calibCache] (int8 ptq calib cache file)" << "\n"
          << std::endl;
 }
 
-void parse_options(int argc, char**argv, dt_builder::BuilderParam& options,
+void parseOptions(int argc, char**argv, dt_builder::BuilderParam& options,
                    std::string& output_file) {
     struct option long_options[] = {
         {"dlaStandalone", no_argument, 0, 1},
@@ -60,7 +60,7 @@ void parse_options(int argc, char**argv, dt_builder::BuilderParam& options,
         {"fp16", no_argument, 0, 7},
         {"int8", no_argument, 0, 8},
         {"workspace", no_argument, 0, 9},
-        {"calib_cache", no_argument, 0, 10},
+        {"calibCache", required_argument, 0, 10},
         {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}
     };
@@ -139,7 +139,7 @@ int main(int argc, char* argv[])
     dt_builder::BuilderParam options;
     std::string output;
 
-    parse_options(argc, argv, options, output);
+    parseOptions(argc, argv, options, output);
     if (options.onnx_filename.empty() || output.empty()) {
         return 0;
     }

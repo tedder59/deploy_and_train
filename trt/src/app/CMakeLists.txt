@@ -30,3 +30,10 @@ target_link_libraries(cdet dt_infer dt_builder dt_plugin
                            nvinfer_plugin cudart
                            ${OpenCV_LIBS} benchmark
                            pthread)
+
+# traffic
+add_executable(yolo_ptq traffic/ptq.cpp)
+target_link_libraries(yolo_ptq dt_infer dt_builder dt_plugin
+                               nvinfer nvonnxparser
+                               nvinfer_plugin cudart
+                               ${OpenCV_LIBS})
