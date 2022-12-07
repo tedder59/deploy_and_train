@@ -1,7 +1,7 @@
 /***
  * Author: ZhuXiaolong
  * Date: 2022-11-22 15:04:17
- * LastEditTime: 2022-11-24 13:58:11
+ * LastEditTime: 2022-12-07 11:34:48
  * FilePath: /deploy_and_train/trt/src/app/traffic/ptq.cpp
  * Description: 
  * Copyright (c) 2022 by ZhuXiaolong, All Rights Reserved.
@@ -165,7 +165,10 @@ public:
         , rows_(r), cols_(c)
     {
         std::filesystem::path directory = d.c_str();
-        iter_ = std::filesystem::directory_iterator(directory);
+        if (directory.empty())
+            iter_ = std::filesystem::directory_iterator();
+        else
+            iter_ = std::filesystem::directory_iterator(directory);
     }
 
     bool next(int n, const char* names[],
@@ -292,11 +295,11 @@ bool saveEngine(const BuilderParam& params)
         }
     }
 
-    if (!params.calib_dir.empty()) {
-        ImageDataLoader dataloader(params.calib_dir, 640, 640);
-        CalibratorPtr calib(new Calibrator(params.calib_cache, dataloader));
+    ImageDataLoader dataloader(params.calib_dir, 544, 960);
+    CalibratorPtr calib(new Calibrator(params.calib_cache, dataloader));
+
+    if (!params.calib_dir.empty())
         config->setInt8Calibrator(calib.get());
-    }
 
     TrtUniquePtr<nvinfer1::IHostMemory> plan(builder->buildSerializedNetwork(*network, *config));
     if (!plan) {
