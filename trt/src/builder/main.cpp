@@ -59,7 +59,7 @@ void parseOptions(int argc, char**argv, dt_builder::BuilderParam& options,
         {"sparsity", no_argument, 0, 6},
         {"fp16", no_argument, 0, 7},
         {"int8", no_argument, 0, 8},
-        {"workspace", no_argument, 0, 9},
+        {"workspace", required_argument, 0, 9},
         {"calibCache", required_argument, 0, 10},
         {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}

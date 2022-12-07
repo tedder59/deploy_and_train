@@ -42,7 +42,7 @@ void printUsage()
 {
     cout << "TensorRT model PTQ" << "\n";
     cout << "Usage: ptq" << "\n"
-         << "   [-onnx onnx_model.pb] (input onnx pb file)" << "\n"
+         << "   [--onnx onnx_model.pb] (input onnx pb file)" << "\n"
          << "   [-o, --output engine_file] (output serialized engine file)" << "\n"
          << "   [--dlaStandalone] (use DLA Standalone model)" << "\n"
          << "   [--dla 0/1] (chose DLA Core id)" << "\n"
@@ -52,6 +52,7 @@ void printUsage()
          << "   [--int8] (user int8 tensor core)" << "\n"
          << "   [--workspace] (workspace size: MB)" << "\n"
          << "   [--calibInputs] (int8 ptq calib image directory)" << "\n"
+         << "   [--calibCache] (int8 ptq calib cache)" << "\n"
          << std::endl;
 }
 
@@ -102,7 +103,7 @@ void parseOptions(int argc, char**argv, BuilderParam& options)
         {"sparsity", no_argument, 0, 6},
         {"fp16", no_argument, 0, 7},
         {"int8", no_argument, 0, 8},
-        {"workspace", no_argument, 0, 9},
+        {"workspace", required_argument, 0, 9},
         {"calibInputs", required_argument, 0, 10},
         {"calibCache", required_argument, 0, 11},
         {"help", no_argument, 0, 'h'},
@@ -269,7 +270,12 @@ bool saveEngine(const BuilderParam& params)
         return false;
     }
 
-    config->setFlag(nvinfer1::BuilderFlag::kINT8);
+    if (params.int8)
+        config->setFlag(nvinfer1::BuilderFlag::kINT8);
+
+    if (params.fp16)
+        config->setFlag(nvinfer1::BuilderFlag::kFP16);
+
     // DLA config
     if (params.dla_cfg.enable && builder->getNbDLACores() > 0) {
         config->setDefaultDeviceType(nvinfer1::DeviceType::kDLA);
@@ -286,9 +292,11 @@ bool saveEngine(const BuilderParam& params)
         }
     }
 
-    ImageDataLoader dataloader(params.calib_dir, 640, 640);
-    CalibratorPtr calib(new Calibrator(params.calib_cache, dataloader));
-    config->setInt8Calibrator(calib.get());
+    if (!params.calib_dir.empty()) {
+        ImageDataLoader dataloader(params.calib_dir, 640, 640);
+        CalibratorPtr calib(new Calibrator(params.calib_cache, dataloader));
+        config->setInt8Calibrator(calib.get());
+    }
 
     TrtUniquePtr<nvinfer1::IHostMemory> plan(builder->buildSerializedNetwork(*network, *config));
     if (!plan) {
@@ -307,6 +315,7 @@ bool saveEngine(const BuilderParam& params)
     
     ofs.write((char*)plan->data(), plan->size());
     ofs.close();
+    return true;
 }
                       
 int main(int argc, char* argv[])
