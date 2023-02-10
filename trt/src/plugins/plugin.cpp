@@ -19,6 +19,7 @@
 
 #include "centernet/decode_plugin.h"
 #include "centernet/deformable_conv2d_plugin.h"
+#include "bevdet/bev_pool_v2.h"
 
 using namespace dt_plugin;
 
@@ -27,6 +28,7 @@ bool registerDtPlugins()
     bool ret = true;
     ret = ret && registerCenterNetDecodePlugin();
     ret = ret && registerDeformableConv2dPlugin();
+    ret = ret && registerTRTBEVPoolV2();
     return ret;
 }
 
