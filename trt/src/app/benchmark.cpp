@@ -141,6 +141,10 @@ static void zerocopyTeardown(const benchmark::State& state)
 
 static void syncInfer(benchmark::State& s)
 {
+    if (s.thread_index == 0) {
+        syncSetup(s);
+    }
+
     for (auto _ : s) {
         auto start = std::chrono::high_resolution_clock::now();
 
@@ -153,10 +157,18 @@ static void syncInfer(benchmark::State& s)
             );
         s.SetIterationTime(elapsed_seconds.count());
     }
+
+    if (s.thread_index == 0) {
+        syncTeardown(s);
+    }
 }
 
 static void asyncInfer(benchmark::State& s)
 {
+    if (s.thread_index == 0) {
+        asyncSetup(s);
+    }
+
     for (auto _ : s) {
         auto start = std::chrono::high_resolution_clock::now();
 
@@ -169,10 +181,18 @@ static void asyncInfer(benchmark::State& s)
             );
         s.SetIterationTime(elapsed_seconds.count());
     }
+
+    if (s.thread_index == 0) {
+        asyncTeardown(s);
+    }
 }
 
 static void uniformInfer(benchmark::State& s)
 {
+    if (s.thread_index == 0) {
+        uniformSetup(s);
+    }
+
     for (auto _ : s) {
         auto start = std::chrono::high_resolution_clock::now();
 
@@ -185,12 +205,20 @@ static void uniformInfer(benchmark::State& s)
             );
         s.SetIterationTime(elapsed_seconds.count());
     }
+
+    if (s.thread_index == 0) {
+        uniformTeardown(s);
+    }
 }
 
 #ifdef JETSON
 
 static void zerocopyInfer(benchmark::State& s)
 {
+    if (s.thread_index == 0) {
+        zerocopySetup(s);
+    }
+
     for (auto _ : s) {
         auto start = std::chrono::high_resolution_clock::now();
 
@@ -203,30 +231,30 @@ static void zerocopyInfer(benchmark::State& s)
             );
         s.SetIterationTime(elapsed_seconds.count());
     }
+
+    if (s.thread_index == 0) {
+        zerocopyTeardown(s);
+    }
 }
 
 #endif	// JETSON
 
 BENCHMARK(syncInfer)->Threads(1)->Iterations(100)\
                     ->UseManualTime()\
-                    ->Unit(benchmark::kMillisecond)\
-                    ->Setup(syncSetup)->Teardown(syncTeardown);
+                    ->Unit(benchmark::kMillisecond);
 
 BENCHMARK(asyncInfer)->Threads(1)->Iterations(100)\
                      ->UseManualTime()\
-                     ->Unit(benchmark::kMillisecond)\
-                     ->Setup(asyncSetup)->Teardown(asyncTeardown);
+                     ->Unit(benchmark::kMillisecond);
 
 BENCHMARK(uniformInfer)->Threads(1)->Iterations(100)\
                        ->UseManualTime()\
-                       ->Unit(benchmark::kMillisecond)\
-                       ->Setup(uniformSetup)->Teardown(uniformTeardown);
+                       ->Unit(benchmark::kMillisecond);
 
 #ifdef JETSON
 BENCHMARK(zerocopyInfer)->Threads(1)->Iterations(100)\
                         ->UseManualTime()\
-                        ->Unit(benchmark::kMillisecond)\
-                        ->Setup(zerocopySetup)->Teardown(zerocopyTeardown);
+                        ->Unit(benchmark::kMillisecond);
 #endif	// JETSON
 
 BENCHMARK_MAIN();

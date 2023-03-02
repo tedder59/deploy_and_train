@@ -21,12 +21,6 @@ import torch
 import os
 
 
-from importmagician import import_from
-with import_from(f'{os.path.dirname(os.path.abspath(__file__))}/../..'):
-    from modules.meta_arch.retinanet import RetinaNet
-    from configs import Config
-
-
 inline_sources = """
 #include <torch/script.h>
 #include <tuple>
@@ -35,32 +29,32 @@ torch::Tensor box2d_decode(const torch::Tensor& anchors,
                            const torch::Tensor& regress)
 {
     const int box_dim = 4;
-    int num_anchors = anchors.size(0);
+    int batch = anchors.size(0);
+    int num_anchors = anchors.size(1);
     auto options = torch::TensorOptions().dtype(torch::kFloat32)
                                          .device(torch::kCUDA);
     
-    auto bboxes = torch::empty({num_anchors, box_dim}, options);
+    auto bboxes = torch::empty({batch, num_anchors, box_dim}, options);
     return bboxes;
 }
 
-torch::Tensor batch_cls_nms_2d(const torch::Tensor& batch_idxes,
-                               const torch::Tensor& cats,
-                               const torch::Tensor& scores,
-                               const torch::Tensor& bboxes,
-                               int64_t batch_num,
-                               double iou_thr,
-                               double max_edge,
-                               int64_t max_output_num)
+torch::Tensor batch_cls_nms(const torch::Tensor& cats,
+                            const torch::Tensor& scores,
+                            const torch::Tensor& boxes,
+                            const torch::Tensor& score_thrs,
+                            int64_t max_output_num,
+                            double iou_thr)
 {
     const int box_dim = 6;
+    int batch = cats.size(0);
     auto options = torch::TensorOptions().dtype(torch::kFloat32)
                                          .device(torch::kCUDA);
-    return torch::empty({batch_num, max_output_num, box_dim});
+    return torch::empty({batch, max_output_num, box_dim});
 }
 
 TORCH_LIBRARY(custom_ops, m) {
     m.def("box2d_decode", &box2d_decode);
-    m.def("batch_cls_nms_2d", &batch_cls_nms_2d);
+    m.def("batch_cls_nms", &batch_cls_nms);
 }
 """
 cpp_extension.load_inline(
@@ -73,7 +67,7 @@ cpp_extension.load_inline(
 
 @parse_args('v', 'v')
 def symbolic_box2d_decode(g, anchors, regress):
-    return g.op('custom_domain::Box2dDecode',
+    return g.op('custom_domain::RetinaNetDecode',
                 anchors, regress);
 
 
@@ -81,83 +75,92 @@ register_custom_op_symbolic("custom_ops::box2d_decode",
                             symbolic_box2d_decode, 13)
 
 
-@parse_args('v', 'v', 'v', 'v', 'i', 'f', 'f', 'i')
-def symbolic_efficient_nms(g, batch_idxes, cats, scores, bboxes,
-                           batch_size, iou_thr, max_edge,
-                           max_output_num):
-    return g.op('custom_domain::BatchClsNMS2d',
-                batch_idxes, cats, scores, bboxes, batch_size,
-                iou_thr_f=iou_thr,
-                max_edge_f=max_edge,
-                max_output_num_i=max_output_num)
+@parse_args('v', 'v', 'v', 'v', 'i', 'f')
+def symbolic_batch_cls_nms(g, cats, scores, boxes,
+                           score_thr,
+                           max_output_num, iou_thr):
+    return g.op('custom_domain::BatchClsNms2D',
+                cats, scores, boxes, score_thr,
+                max_output_num_i=max_output_num,
+                iou_thr_f=iou_thr)
 
 
-register_custom_op_symbolic("custom_ops::batch_cls_nms_2d",
-                            symbolic_efficient_nms, 13)
+register_custom_op_symbolic("custom_ops::batch_cls_nms",
+                            symbolic_batch_cls_nms, 13)
 
 
 class Wrapper(nn.Module):
-    def __init__(self, model, conf_thr, iou_thr,
-                 max_output_num, num_classes,
-                 batch_size=1):
+    def __init__(self, model, conf_thr, max_output_num):
         super().__init__()
         self.model = model
-        self.conf_thr = conf_thr
-        self.iou_thr = iou_thr
+        self.conf_thr = torch.tensor(conf_thr)
         self.max_output_num = max_output_num
-        self.num_classes = num_classes
 
-        self.anchors = self.model.anchors.tile(batch_size, 1, 1)
-        self.max_edge = float(max(self.model.input_size))
+        self.iou_thr = model.iou_thr
+        self.num_classes = model.num_classes
+        self.num_anchors = model.num_anchors
+        self.topk_num = model.num_preds
+        self.lvl_spatials = model.spatials
+
+        self.anchors = model.anchors
+
+    def decode(self, logits, regress):
+        f = lambda x, s: \
+            x.reshape(-1, self.num_anchors * self.num_classes, s)\
+             .permute(0, 2, 1)\
+             .reshape(-1, s * self.num_anchors, self.num_classes)
+
+        logits = [f(x, s) for x, s in zip(logits, self.lvl_spatials)]
+        logits = torch.cat(logits, dim=1)
+        logits = logits.sigmoid()
+
+        f = lambda x, s: \
+            x.reshape(-1, self.num_anchors * 4, s)\
+             .permute(0, 2, 1)\
+             .reshape(-1, s * self.num_anchors, 4)
+        
+        regress = [f(x, s) for x, s in zip(regress, self.lvl_spatials)]
+        regress = torch.cat(regress, dim=1)
+
+        batch_cls = []
+        batch_scores = []
+        batch_anchors = []
+        batch_regress = []
+        for cls, reg in zip(logits, regress):
+            sorted_scores, sorted_idx = torch.topk(cls.flatten(), self.topk_num)
+            sorted_anchor_idx = torch.div(sorted_idx, self.num_classes, rounding_mode='trunc')
+            sorted_cls = torch.remainder(sorted_idx, self.num_classes)
+
+            batch_cls.append(sorted_cls)
+            batch_scores.append(sorted_scores)
+
+            batch_anchors.append(self.anchors[sorted_anchor_idx])
+            batch_regress.append(reg[sorted_anchor_idx])
+
+        labels = torch.stack(batch_cls)
+        scores = torch.stack(batch_scores)
+        anchors = torch.stack(batch_anchors)
+        regress = torch.stack(batch_regress)
+
+        boxes = torch.ops.custom_ops.box2d_decode(anchors, regress)
+        return labels, scores, boxes
 
     def forward(self, x):
         outs = self.model(x)
         logits, regress = outs
-
-        fn = lambda x, s: \
-            x.reshape(-1, self.model.num_anchors * self.model.num_classes, s)\
-             .permute(0, 2, 1)\
-             .reshape(-1, s * self.model.num_anchors, self.model.num_classes)
-
-        logits = [fn(x, s) for x, s in zip(logits, self.model.spatials)]
-        logits = torch.cat(logits, dim=1)
-
-        fn = lambda x, s: \
-            x.reshape(-1, self.model.num_anchors * 4, s)\
-             .permute(0, 2, 1)\
-             .reshape(-1, s * self.model.num_anchors, 4)
-
-        regress = [fn(x, s) for x, s in zip(regress, self.model.spatials)]
-        regress = torch.cat(regress, dim=1)
-        scores = logits.sigmoid_()
-
-        mask = torch.greater_equal(scores, self.conf_thrs)
-        mask = torch.any(mask, dim=2, keepdim=True)
-
-        batch_num = logits.shape[0]
-        batch_anchors = self.anchors.tile(batch_num, 1, 1)
-        scores = scores[mask]
-        regress = regress[mask]
-        anchors = batch_anchors[mask]
-
-        anchor_num = logits.shape[1]
-        batch_idxes = torch.arange(batch_num)[..., None]
-        batch_idxes = batch_idxes.tile(1, anchor_num)[mask]
-
-        scores, cats = scores.max(dim=1)
-        bboxes = torch.ops.custom_ops.box2d_decode(anchors, regress)
-        dets = torch.ops.custom_ops.batch_cls_nms_2d(
-            batch_idxes, cats, scores, bboxes, batch_num,
-            self.iou_thr, self.max_edge, self.max_output_num
+        labels, scores, boxes = self.decode(logits, regress)
+        objs = torch.ops.custom_ops.batch_cls_nms(
+            labels, scores, boxes, self.conf_thr,
+            self.max_output_num, self.iou_thr
         )
-
-        return dets, outs[0], outs[1]
-
+        return objs
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, required=True,
                         help='path to config file')
+    parser.add_argument('--ckpt', type=str, required=True,
+                        help='ckpt name')
     parser.add_argument('-o', '--output', type=str,
                         default='out.onnx',
                         help='output onnx file path')
@@ -168,26 +171,27 @@ if __name__ == "__main__":
     if not args.int8:
         quant_modules.deactivate()
 
+    from modules.meta_arch.retinanet import RetinaNet
+    from configs import Config
+    
     cfg = Config(Config.load_yaml_with_base(args.config))
     ccfg = cfg.MODEL
     input_size = ccfg.PREDICT.INPUT_SIZE
     model = RetinaNet(ccfg)
 
     ccfg = cfg.SAVE
-    ckpt = torch.load(ccfg.RESUME, map_location='cpu')
+    ckpt = os.path.join(ccfg.OUTPUT_PATH, args.ckpt)
+    ckpt = torch.load(ckpt, map_location='cpu')
     model.load_state_dict(ckpt['model'])
     model.eval()
     model.cuda()
 
     ccfg = cfg.MODEL.PREDICT
 
-    m = Wrapper(model, ccfg.SCORE_THRESHOLDS[0],
-                ccfg.IOU_THRESHOLD,
-                ccfg.NUM_OUTPUTS,
-                ccfg.NUM_CLASSES)
+    m = Wrapper(model, [0.2, 0.2, 0.2], 50)
     h, w = input_size
     dummy = torch.empty((1, 3, h, w), dtype=torch.float32, device="cuda")
     torch.onnx.export(m, dummy, args.output,
                       input_names=['input'],
-                      output_names=['num_dets', 'dets'],
+                      output_names=['dets'],
                       opset_version=13)

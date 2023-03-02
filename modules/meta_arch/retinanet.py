@@ -383,6 +383,8 @@ class RetinaNetVisualizer:
                 cv2.putText(im, text, (x1, y1),
                             cv2.FONT_HERSHEY_COMPLEX,
                             1, self.classes_color[c])
+            
+            im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
             out_dict[image_file] = im
 
         return out_dict

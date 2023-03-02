@@ -26,46 +26,47 @@ ANCHOR_GENERATOR: &ANCHORS
 DATASET:
   NAME: "build_coco_dataset"
   TRAIN: 
-    ANNOTATION: "datasets/COCO/kitti_train.json"
+    ANNOTATION: "data/RetinaNet/kitti_train.json"
     TRANSFORMS:
       COCOLoadImage: null
       COCOBBoxResize:
         INPUT_SIZE: &INPUT_SIZE [384, 1152]
 
   VAL: 
-    ANNOTATION: &VAL_ANNOTATION "datasets/COCO/kitti_val.json"
+    ANNOTATION: &VAL_ANNOTATION "data/RetinaNet/kitti_val.json"
     TRANSFORMS:
       COCOLoadImage: null
       COCOResize:
         INPUT_SIZE: *INPUT_SIZE
       
   TEST: 
-    ANNOTATION: "datasets/COCO/kitti_val.json"
+    ANNOTATION: "data/RetinaNet/kitti_val.json"
     TRANSFORMS:
       COCOLoadImage: null
       COCOResize:
         INPUT_SIZE: *INPUT_SIZE
 
 DATALOADER:
+  BATCH_MULTIPLY: 1
   TRAIN:
-    BATCH_SIZE: 16
-    NUM_WORKERS: 8
+    BATCH_SIZE: 12
+    NUM_WORKERS: 6
     COLLATE_FN:
       NAME: "COCOTrainCollator"
       PIXEL_MEAN: [0.485, 0.456, 0.406]
       PIXEL_STD: [0.229, 0.224, 0.225]
 
   VAL:
-    BATCH_SIZE: 32
-    NUM_WORKERS: 8
+    BATCH_SIZE: 24
+    NUM_WORKERS: 12
     COLLATE_FN:
       NAME: "COCOValCollator"
       PIXEL_MEAN: [0.485, 0.456, 0.406]
       PIXEL_STD: [0.229, 0.224, 0.225]
 
   TEST:
-    BATCH_SIZE: 32
-    NUM_WORKERS: 8
+    BATCH_SIZE: 48
+    NUM_WORKERS: 24
     COLLATE_FN:
       NAME: "COCOTestCollator"
       PIXEL_MEAN: [0.485, 0.456, 0.406]
@@ -76,7 +77,7 @@ MODEL:
   MODULES:
     -
       NAME: "MobileNetV3"
-      pretrained: "data/mobilenet_v3_small-047dcff4.pth"
+      # pretrained: "data/mobilenet_v3_small-047dcff4.pth"
       base_channels: 16
       inverted_residuals:
         - [16, 3, 16, 16, True, False, 2, 1]
@@ -136,7 +137,7 @@ CRITERION:
   NUM_ANCHORS: *num_anchors
   
 SOLVER:
-  MAX_EPOCHS: 600
+  MAX_EPOCHS: 100
   BASE_LR: 0.01
   MOMENTUM: 0.9
   WEIGHT_DECAY: 0.0001
@@ -152,7 +153,7 @@ EVALUATOR:
   MAX_DETS: 100
   ANNOTATION: *VAL_ANNOTATION
   INPUT_SIZE: *INPUT_SIZE
-  INTERVAL: 1
+  INTERVAL: 5
   METRIC_NAME: &METRIC_NAME "AP"
 
 VISUALIZE:
@@ -168,9 +169,9 @@ VISUALIZE:
   INPUT_SIZE: *INPUT_SIZE
   
 SAVE:
-  OUTPUT_PATH: "data/1104-m"
+  OUTPUT_PATH: "data/runs/RetinaNet"
   VAL_SCORE: *METRIC_NAME
   RESUME: null
-  NUM_CHECKPOINTS: 20
+  NUM_CHECKPOINTS: 5
   INTERVAL: 5
   PTQ: null

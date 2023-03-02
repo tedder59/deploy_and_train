@@ -25,10 +25,11 @@ def get_dataflow(cfg):
     idist.barrier()
 
     num_world = idist.get_world_size()
-
+    bm = cfg.DATALOADER.BATCH_MULTIPLY
+    
     ccfg = cfg.DATALOADER.TRAIN
     train_dataloader = idist.auto_dataloader(
-        train_dataset, batch_size=ccfg.BATCH_SIZE * num_world,
+        train_dataset, batch_size=ccfg.BATCH_SIZE * num_world * bm,
         num_workers=ccfg.NUM_WORKERS,
         collate_fn=get_collate_wrapper(ccfg.COLLATE_FN),
         shuffle=True, drop_last=True
@@ -36,7 +37,7 @@ def get_dataflow(cfg):
 
     ccfg = cfg.DATALOADER.VAL
     val_dataloader = idist.auto_dataloader(
-        val_dataset, batch_size=ccfg.BATCH_SIZE * num_world,
+        val_dataset, batch_size=ccfg.BATCH_SIZE * num_world * bm,
         num_workers=ccfg.NUM_WORKERS,
         collate_fn=get_collate_wrapper(ccfg.COLLATE_FN),
         shuffle=False, drop_last=False

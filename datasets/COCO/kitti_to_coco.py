@@ -155,6 +155,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("kitti_to_coco")
     parser.add_argument("--kitti", type=str, required=True, 
                         help="path to kitt dataset")
+    parser.add_argument("--output", type=str, required=True,
+                        help="output anno directory")
+    
     args = parser.parse_args()
 
     image_root = os.path.join(args.kitti, 'image_2')
@@ -167,6 +170,12 @@ if __name__ == "__main__":
         image_label_list, test_size=0.1, train_size=0.9
     )
 
+    if not os.path.exists(args.output):
+        os.makedirs(args.output, exist_ok=True)
+
+    train_anno = os.path.join(args.output, 'kitti_train.json')
+    val_anno = os.path.join(args.output, 'kitti_val.json')
+
     start_id = 0
-    start_id = save_json(images_map, train_split, 'kitti_train.json', start_id)
-    save_json(images_map, test_split, 'kitti_val.json', start_id)
+    start_id = save_json(images_map, train_split, train_anno, start_id)
+    save_json(images_map, test_split, val_anno, start_id)

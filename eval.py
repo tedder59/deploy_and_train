@@ -28,11 +28,12 @@ def get_dataflow(cfg):
     return dataloader
 
 
-def create(cfg):
+def create(cfg, ckpt):
     model = build_model(cfg.MODEL)
 
     ccfg = cfg.SAVE
-    checkpoint = torch.load(ccfg.RESUME, map_location='cpu')
+    ckpt = os.path.join(ccfg.OUTPUT_PATH, ckpt)
+    checkpoint = torch.load(ckpt, map_location='cpu')
     model.load_state_dict(checkpoint['model'])
 
     model.eval()
@@ -56,9 +57,9 @@ def create(cfg):
     return evaluator
 
 
-def eval(local_rank, cfg):
+def eval(local_rank, cfg, ckpt):
     dataloader = get_dataflow(cfg)
-    evaluator = create(cfg)
+    evaluator = create(cfg, ckpt)
     evaluator.run(dataloader)
 
 
@@ -66,13 +67,15 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True,
                         help="config file")
+    parser.add_argument("--ckpt", type=str, required=True,
+                        help="checkpoint filename")
     args = parser.parse_args()
     return args
 
 
 if __name__ == "__main__" and (not with_torch_launch):
     """
-    Single node with 1 GPU: python train.py --config xxx
+    Single node with 1 GPU: python eval.py --config xxx
     """
     assert torch.cuda.is_available(), "cuda invalid!"
     assert torch.backends.cudnn.is_available(), "cudnn invalid!"
@@ -80,13 +83,13 @@ if __name__ == "__main__" and (not with_torch_launch):
 
     args = parse_args()
     cfg = Config(Config.load_yaml_with_base(args.config))
-    eval(0, cfg)
+    eval(0, cfg, args.ckpt)
 
 
 if __name__ == "__main__" and with_torch_launch:
     """
     Single node with 4 GPUS
-    torchrun --nproc_per_node=4 train.py -- --config xxx
+    torchrun --nproc_per_node=4 eval.py -- --config xxx
 
     Multi nodes with multi GPUS
     node 0:

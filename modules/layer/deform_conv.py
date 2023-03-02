@@ -111,8 +111,6 @@ class DCNV2(nn.Module):
 
         self.deform = DeformConv2d(in_channels, out_channels, kernel_size,
                                    stride, padding, dilation, groups, bias)
-
-
         self.reset_mask()
 
     def reset_mask(self):
